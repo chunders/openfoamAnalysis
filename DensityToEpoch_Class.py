@@ -75,11 +75,25 @@ def gaussian6(x, *params):
     c = params[2]
     return A*np.exp(-((x-x0)/(c**2))**6)
 
+def gaussian8(x, *params):
+    #Gaussian function
+    A = params[0]
+    x0 = params[1]
+    c = params[2]
+    return A*np.exp(-((x-x0)/(c**2))**8)
+
+def supergauss(x, x0, c, order):
+    return np.exp(-((x-x0)/(c**2))**order)
+
 def stepUp(x, xc = 0,  k = 1):
     return 0.5 + 0.5 * np.tanh(k * (x - xc))
 
 def printGaussFormula_for_epoch(popt1, num):
-    print '  xg{} = '.format(num) + '{0:.2e}'.format(popt1[0]) + ' * supergauss(x , {0:.4e}'.format (popt1[1]) + ', {0:.4e}'.format(popt1[2] ** 2) + ', 6)'
+    outStr = ''
+    outStr +='  xg{} = '.format(num) + '{0:.2e}'.format(popt1[1][0])
+    outStr += ' * supergauss(x , {0:.4e}'.format (popt1[1][1]) 
+    outStr += ', {0:.4e}'.format(popt1[1][2]**2) + ', '+ str(int(popt1[0])) +')'
+    print outStr
 
 def printStepFnc(xc, k):
     print 
@@ -157,8 +171,8 @@ class Lineout_to_epoch():
             
             fitG = bestGaus.select_Gaus_fit(xcrop, ycrop, False, guess[i])
             print 'Output of new fitting function'
-            a, b =  fitG.output()
-            print a, b
+            sgOrder, poptBestGaus =  fitG.output()
+            print sgOrder, poptBestGaus
             popt, pcov = curve_fit(gaussian6, xcrop,ycrop , p0=guess[i]) #, bounds=(0, [1e27, 20, 20]))
             if popt[2] < 0:
                 print 'Width is negative, taking abs value'
@@ -181,14 +195,37 @@ class Lineout_to_epoch():
 #                print '\t' + str(p) + ' +/- ' + str(e)
 #            
         
-            self.fitPopt.append(popt)
+            self.fitPopt.append([sgOrder, poptBestGaus])
     
-        self.fitPopt = np.array(self.fitPopt)     
+        print 'Output of fit'
+        print self.fitPopt
+#        self.fitPopt = np.array(self.fitPopt)     
         
+    def gaus_selector(self, inGausData):
+        order = inGausData[0]
+        print 'Selecting Gaus of order: ' , order
+        
+        if order == 2:
+            print '2' , inGausData[1]
+            return gaussian(self.x, *inGausData[1])
+        elif order == 4:
+            print '4', inGausData[1]
+            return gaussian4(self.x, *inGausData[1])
+
+        elif order == 6:
+            print '6'    , inGausData[1]
+            return gaussian6(self.x, *inGausData[1])
+
+        elif order == 8:
+            print '8'     , inGausData[1]  
+            return gaussian8(self.x, *inGausData[1])
+
+        
+
     def createFittedFunction(self):
         #Create the fitted function of gaussians and step functions
-        self.yoverall = gaussian6(self.x, *self.fitPopt[0])  * (1-stepUp(self.x, xc = self.stepPos, k = self.stepness)) 
-        self.yoverall += gaussian6(self.x, *self.fitPopt[1]) * (stepUp(self.x, self.stepPos, k = self.stepness))
+        self.yoverall = self.gaus_selector(self.fitPopt[0])  * (1-stepUp(self.x, xc = self.stepPos, k = self.stepness)) 
+        self.yoverall += self.gaus_selector(self.fitPopt[1])  * (stepUp(self.x, self.stepPos, k = self.stepness))
         
         self.res = (self.y - self.yoverall) #/self.yoverall
         
@@ -236,7 +273,7 @@ class Lineout_to_epoch():
         ax3.yaxis.grid(color='red', linestyle='dashed')
         ax3.xaxis.grid(color='red', linestyle='dashed')
         ax3.set_xlim([self.x[0], self.x[-1]])
-        ax3.plot(self.x_res, self.res,  'r') 
+        ax3.plot(self.x_res, self.res,  'r', lw = 0.9) 
         ax3.set_ylabel('Residual', color='r')
         ax3.tick_params('y', colors='r')
         if mm:
@@ -258,11 +295,16 @@ class Lineout_to_epoch():
         print; print 'Distance at end -> ', yEnd, 'is : ', self.x[yEnd], 'm or ' , self.x[yEnd] * 1e6, 'um'
         print 'Shock index     -> ', self.indexs[1], 'is : ', self.x[self.indexs[1]], 'm or ', self.x[self.indexs[1]] * 1e6, 'um'
         
+        print; print 'Fit params to input'
+        for i in self.fitPopt:
+            print i
+        
         print; print 
         print 'In constant block'; print
         print '  # ' + name
         for popt, i in zip(self.fitPopt, range(1, len(self.fitPopt)+1)):
             printGaussFormula_for_epoch(popt, i)
+            
         printStepFnc(self.stepPos, self.stepness)
         print '  xDens = xg1 * stpDwn + xg2 * stpUp'
         print; print 'in control block'
@@ -313,4 +355,6 @@ if __name__ == "__main__":
     run(folderPath, fileName, invert, MoveShockToBottomMark,
         shiftInX, xScale, guess, '')
     
+    #   if needing to check things
+    x = np.arange(-0.001, 0.002, 0.000001)
 
