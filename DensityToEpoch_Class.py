@@ -288,7 +288,7 @@ def run(folderPath, fileName, invert, MoveShockToBottomMark,
     dp.createFittedFunction()
     dp.plotFit_vs_input()
     dp.displayTextForEpoch(name)
-    plt.savefig('densityMapping__' + folderPath.split('/')[-2] + '__' + fileName.split('.')[0] + '.png')
+    plt.savefig(folderPath + 'densityMapping__' + folderPath.split('/')[-2] + '__' + fileName.split('.')[0] + '.png')
     plt.show()
 
 
