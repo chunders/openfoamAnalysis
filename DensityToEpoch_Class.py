@@ -38,16 +38,17 @@ can easily be altered.
 """
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
-sns.set_context('talk')    #paper, notebook, talk, poster
-from scipy.optimize import curve_fit
 import matplotlib.gridspec as gridspec
 
 import select_best_gaussFit_class as bestGaus
+import foamToEpoch_ResidualFit_Class as resFit
 
+SNS = False
+if SNS:
+    import seaborn as sns
+    sns.set_context('poster')    #paper, notebook, talk, poster
 
 mm = True
-
 
 def nearposn(array,value):
 	#Find array position of value
@@ -104,6 +105,8 @@ def printStepFnc(xc, k):
 class Lineout_to_epoch():
     def __init__(self, DirectoryPath, fileName, invert, translation):
         self.shapeToFit = np.loadtxt(DirectoryPath + fileName)
+        self.fileName = fileName
+        self.folderPath = DirectoryPath
         self.x = self.shapeToFit[:,0]*1e-3        #Convert to m, for input into epoch
         self.y = self.shapeToFit[:,1]
         if invert:
@@ -111,9 +114,9 @@ class Lineout_to_epoch():
                 
         self.ygrad = np.gradient(self.y)
         self.translate(translation)
-        
-        #Stepness of stepfunctions 
-        self.stepness = 1e6   
+        self.xScale = translation[1]
+        #steepness of stepfunctions 
+        self.steepness = 1e6   
 
         
     def translate(self, translation):
@@ -123,8 +126,8 @@ class Lineout_to_epoch():
         self.shiftInX =  translation[0]
         self.x = self.x - self.shiftInX
         
-        self.xScale = translation[1]
-        self.x = self.x/self.xScale
+        self.xScale2 = translation[1]
+        self.x = self.x/self.xScale2
 
     def plotInitProfile(self):
         plt.figure(figsize = (5,3.5))
@@ -151,7 +154,7 @@ class Lineout_to_epoch():
     #    print x[start], x[::-1][finish]
         self.indexs = [start, nearposn(self.ygrad, self.peakGrad), len(self.x) - finish]
         self.indexs[1] = self.indexs[1] + MoveShockToBottomMark
-#        self.plotInitProfile()
+        self.plotInitProfile()
         self.stepPos = self.x[self.indexs[1]]
 
     
@@ -173,13 +176,14 @@ class Lineout_to_epoch():
             print 'Output of new fitting function'
             sgOrder, poptBestGaus =  fitG.output()
             print sgOrder, poptBestGaus
-            popt, pcov = curve_fit(gaussian6, xcrop,ycrop , p0=guess[i]) #, bounds=(0, [1e27, 20, 20]))
-            if popt[2] < 0:
-                print 'Width is negative, taking abs value'
-                popt[2] = abs(popt[2])
-                poptInit = popt
-                popt, pcov = curve_fit(gaussian6, xcrop,ycrop , p0=popt)
-                print 'ratio of fits', poptInit / popt
+            
+#            popt, pcov = curve_fit(gaussian6, xcrop,ycrop , p0=guess[i]) #, bounds=(0, [1e27, 20, 20]))
+#            if popt[2] < 0:
+#                print 'Width is negative, taking abs value'
+#                popt[2] = abs(popt[2])
+#                poptInit = popt
+#                popt, pcov = curve_fit(gaussian6, xcrop,ycrop , p0=popt)
+#                print 'ratio of fits', poptInit / popt
                 
         #    plt.plot(xcrop,ycrop)   
         #    plt.plot(xcrop, gaussian6(xcrop, *popt), '--r', lw = 3)
@@ -224,8 +228,8 @@ class Lineout_to_epoch():
 
     def createFittedFunction(self):
         #Create the fitted function of gaussians and step functions
-        self.yoverall = self.gaus_selector(self.fitPopt[0])  * (1-stepUp(self.x, xc = self.stepPos, k = self.stepness)) 
-        self.yoverall += self.gaus_selector(self.fitPopt[1])  * (stepUp(self.x, self.stepPos, k = self.stepness))
+        self.yoverall = self.gaus_selector(self.fitPopt[0])  * (1-stepUp(self.x, xc = self.stepPos, k = self.steepness)) 
+        self.yoverall += self.gaus_selector(self.fitPopt[1])  * (stepUp(self.x, self.stepPos, k = self.steepness))
         
         self.res = (self.y - self.yoverall) #/self.yoverall
         
@@ -237,7 +241,7 @@ class Lineout_to_epoch():
         # plotting the resulting function 
         #==============================================================================
         plt.figure(figsize = (8,8))
-    
+        if SNS: sns.set_style('white')
         gs = gridspec.GridSpec(2, 1, height_ratios=[3,1])
         
         if mm:
@@ -252,28 +256,32 @@ class Lineout_to_epoch():
         ax1.legend()
         ax1.vlines(0, 0, self.y.max(), colors='r', linestyle='dashed')
         
-        ax1.yaxis.grid(color='gray', linestyle='dashed')
-        ax1.xaxis.grid(color='gray', linestyle='dashed')
+        ax1.yaxis.grid(color='gray', linestyle='dashed' , lw = 0.5)
+        ax1.xaxis.grid(color='gray', linestyle='dashed', lw = 0.5)
         
+        #   Add lines to show where the main points are
         for i in self.x[self.indexs]:
             ax1.vlines(i, 0, self.y.max(), 'g', linestyle = 'dashed')
         
+        #   Create axis with the scale
         ax2 = plt.subplot(gs[1], sharex = ax1)
-        
-            
+        #   Plot the function
         ax2.plot(self.x, self.yoverall, 'b',  lw = 2)
         ax2.set_xlim([self.x[0], self.x[-1]])
         
         ax2.set_ylabel('Density', color='b')
         ax2.tick_params('y', colors='b')
-        ax3 = ax2.twinx()
         
+        #   Twin axis to put residual on same plot
+        ax3 = ax2.twinx()      
         
         ax3.set_axisbelow(True)
         ax3.yaxis.grid(color='red', linestyle='dashed')
         ax3.xaxis.grid(color='red', linestyle='dashed')
         ax3.set_xlim([self.x[0], self.x[-1]])
         ax3.plot(self.x_res, self.res,  'r', lw = 0.9) 
+        ax3.plot(self.x, self.y - self.yoverall,  'g', lw = 0.9) 
+
         ax3.set_ylabel('Residual', color='r')
         ax3.tick_params('y', colors='r')
         if mm:
@@ -282,18 +290,22 @@ class Lineout_to_epoch():
             self.x_res = self.x_res *1e-3
         else:
             ax2.set_xlabel('Distance (m)')
-        
-    
+            
+        #   Save the residual to work with later
+        np.savetxt(self.folderPath + 'residualToFit_' +self.fileName + '.txt', 
+                   np.c_[self.x_res, self.res])
+        plt.suptitle('OpenFoam lineout to Epoch input deck function')
+#        plt.tight_layout()
     #    plt.savefig('FittingOpenFoamToEPOCH.png', dpi=300)
 #        plt.show()
         
     
 
         
-    def displayTextForEpoch(self, name):
+    def displayTextForEpoch(self, name, resFitText):
         yEnd = len(self.yoverall) - next((i for i, val in enumerate((self.yoverall[::-1] - self.yoverall[::-1].min() / self.yoverall[::-1].max())) if val > (self.yoverall.max() - self.yoverall.min()) / 40), None)
-        print; print 'Distance at end -> ', yEnd, 'is : ', self.x[yEnd], 'm or ' , self.x[yEnd] * 1e6, 'um'
-        print 'Shock index     -> ', self.indexs[1], 'is : ', self.x[self.indexs[1]], 'm or ', self.x[self.indexs[1]] * 1e6, 'um'
+        print; print 'Distance at end -> ', yEnd, 'is: ', self.x[yEnd], 'm or ' , self.x[yEnd] * 1e6, 'um'
+        print 'Shock index     -> ', self.indexs[1], 'is: ', self.x[self.indexs[1]], 'm or ', self.x[self.indexs[1]] * 1e6, 'um'
         
         print; print 'Fit params to input'
         for i in self.fitPopt:
@@ -301,16 +313,49 @@ class Lineout_to_epoch():
         
         print; print 
         print 'In constant block'; print
-        print '  # ' + name
+        print '  # ' + name + 'Scaling: ' + str(self.xScale)
         for popt, i in zip(self.fitPopt, range(1, len(self.fitPopt)+1)):
             printGaussFormula_for_epoch(popt, i)
             
-        printStepFnc(self.stepPos, self.stepness)
+        printStepFnc(self.stepPos, self.steepness)
         print '  xDens = xg1 * stpDwn + xg2 * stpUp'
+        print 
+        print resFitText
+        print 
+        print '  xDensProfile = xDens + resFit'
+        print 
+        
         print; print 'in control block'
         time = (self.x[yEnd]) / 3e8
         print 
         print '  t_end = {:.3e}'.format(time*1.01)
+        
+#==============================================================================
+#     This function should become redundant with the new file being created
+#     to look into this
+#==============================================================================
+    def inspect_residual(self):
+        
+        extraFit = resFit.resFitter(self.x_res, self.res, self.shockFront, False, False)
+        newFit, resFitText = extraFit.sections()
+
+        self.yoverall[self.indexs[0]:self.indexs[-1]] += newFit
+        return resFitText
+        
+#        plt.plot(self.x_res, self.res)
+##        np.savetxt('testRes.txt', np.c_[self.x_res, self.res])
+#        crossings = []
+#        for i in range(len(self.res)-1):
+#            if self.res[i] * self.res[i+1] < 0:
+#                crossings.append(i)
+#        
+#        self.nodesInRes = self.x_res[crossings] 
+#        plt.plot(self.nodesInRes, np.zeros(len(crossings)), 's')
+#        
+#        plt.show()
+#        print self.nodesInRes
+#        print self.shockFront
+        
                 
 def run(folderPath, fileName, invert, MoveShockToBottomMark,
         shiftInX, xScale, guess, name):
@@ -328,22 +373,32 @@ def run(folderPath, fileName, invert, MoveShockToBottomMark,
 #    dp.printIndexes()
     dp.fit_main_superGauss(guess)
     dp.createFittedFunction()
+    resFitText = dp.inspect_residual()
+
     dp.plotFit_vs_input()
-    dp.displayTextForEpoch(name)
-    plt.savefig(folderPath + 'densityMapping__' + folderPath.split('/')[-2] + '__' + fileName.split('.')[0] + '.png')
+    plt.savefig(folderPath + 'densityMapping__' + folderPath.split('/')[-2] + '__' + fileName.split('.')[0] + '.png',
+                dpi = 300)
     plt.show()
+    
+    dp.displayTextForEpoch(name, resFitText)
+
 
 
 if __name__ == "__main__": 
     folderPath = '/Volumes/CIDU_passport/openFOAM/Line Out Data/Blade_lineout/h80_0mm/'
+    folderPath = '/Volumes/GoogleDrive/My Drive/HydroSimulations_openFOAM/Line Out Data/Blade_lineout/h80_0mm/'
     fileName = '45lineout.txt'
+    fileName = '65lineout.txt'
     invert = True
     MoveShockToBottomMark = 15
     
     
 #    folderPath = '/Volumes/CIDU_passport/openFOAM/Line Out Data/1mm_Above_Blade_parallel/'
-#    folderPath += 'h50_t-50/'
+#    folderPath = '/Users/chrisunderwood/Downloads/1mm_Above_Blade_parallel/'
+
+#    folderPath += 'h50_t-65/'
 #    fileName = '95lineout.txt'
+#    fileName = '96lineout.txt'
 #    invert = False
 #    MoveShockToBottomMark = 15
 
@@ -353,8 +408,9 @@ if __name__ == "__main__":
              [1e26, 7.5e-3/xScale, 10e-3]]
 
     run(folderPath, fileName, invert, MoveShockToBottomMark,
-        shiftInX, xScale, guess, '')
+        shiftInX, xScale, guess, folderPath.split('/')[-2])
     
     #   if needing to check things
     x = np.arange(-0.001, 0.002, 0.000001)
+    
 
