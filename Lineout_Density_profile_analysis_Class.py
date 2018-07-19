@@ -41,13 +41,14 @@ import os
 from matplotlib import gridspec
 
 class LineoutAnalysis():
-    def __init__(self, DirectoryPath, ma = False):
+    def __init__(self, DirectoryPath, ma = False, indivLine = False):
         self.folderPath = DirectoryPath
 
         self.csv_list, self.timeSteps = self.FilesInFolder()
         self.mach = ma
         self.assignSpreadsheetHeader()
         self.identifingFolder =  self.folderPath.split('/')[-2]
+        self.indivualLineouts = indivLine
         print self.identifingFolder
             
     def FilesInFolder(self):
@@ -83,6 +84,7 @@ class LineoutAnalysis():
         self.rhoArr.append(df.rho)
         self.pArr.append(df.p)
         self.TArr.append(df.Temp)
+        self.velArr.append((df.U0**2 + df.U_1**2 + df.U_2**2)**0.5)
         if self.mach:
             self.maArr.append(df.Ma)
         else:
@@ -94,6 +96,7 @@ class LineoutAnalysis():
         self.pArr = []
         self.TArr = []
         self.maArr = []
+        self.velArr = []
         
         for csv in self.csv_list:            
             file_interest = self.folderPath + csv
@@ -105,11 +108,11 @@ class LineoutAnalysis():
             if csv is self.csv_list[5]:
                 self.arclength = df.arc_length
                 self.y_axis = self.arclength * 1e3
-        
             
-            # First data row is incorrect due to there being no values for the density at time zero
+        # First data row is incorrect due to there being no values for the density at time zero
         del self.rhoArr[0]
         del self.maArr[0]
+        #   Convert to Numpy arrays for future uses
         self.toNpArr()
         
     def toNpArr(self):
@@ -117,6 +120,7 @@ class LineoutAnalysis():
         self.rhoArr = np.asarray(self.rhoArr)
         self.pArr = np.asarray(self.pArr)
         self.TArr = np.asarray(self.TArr)
+        self.velArr = np.asarray(self.velArr)
         self.convert_denity_to_nd()
 
     def convert_denity_to_nd(self):
@@ -124,7 +128,19 @@ class LineoutAnalysis():
         N_A = 6.022e23
         self.ndArr = (self.rhoArr * N_A) / M_A
         
+    def Evolution_of_Speed(self, vMax):
+        # Create the figure        
+        plt.figure(figsize=(8, 8))         
+        # Display the heatmap, which is the timeexpanded lineouts
+        plt.pcolor(self.velArr, vmax = vMax)
+        cbar = plt.colorbar()
+        cbar.ax.get_yaxis().labelpad = 15
+        cbar.ax.set_ylabel(r'Velocity $(ms^{-1})$', rotation=270)
+        plt.ylabel('Openfoam time dump number')
+        plt.xlabel('Lineout Length (mm)')
         
+        plt.savefig(self.folderPath + 'Time_Evolution_of_Speed__' + self.identifingFolder +'.png', dpi = 250)
+        plt.show()        
             
     def Evolution_of_ND(self, startingT):
         #A plot showing the lineout evolution with time
@@ -138,10 +154,10 @@ class LineoutAnalysis():
         ax1 = plt.subplot(gs[1])
         ax1.set_yscale('log')
         
-    
+        # Display the heatmap, which is the timeexpanded lineouts
         im = ax0.pcolor(self.ndArr)
-        
 
+        # Create the color bar, with axis, so on side
         #                       [x0, y0, width, height]
         cbar_ax = fig.add_axes([0.805, 0.4, 0.05, 0.45])
         fig.colorbar(im, cax=cbar_ax)
@@ -160,17 +176,17 @@ class LineoutAnalysis():
         ax0.set_ylabel('Openfoam time dump number')
         ax0.xaxis.set_visible(False)
         ax1.set_xlabel('Lineout Length (mm)')
-        xAxis = np.array(bladeline.y_axis)
+        xAxis = np.array(self.y_axis)
         ax1.set_xlim([xAxis[0], xAxis[-1]])
         fig.subplots_adjust(right=0.15) 
         plt.tight_layout()
-        plt.savefig(self.folderPath + 'Time Evolution of ND ' + self.identifingFolder +'.png', dpi = 250)
+        plt.savefig(self.folderPath + 'Time_Evolution_of_ND__' + self.identifingFolder +'.png', dpi = 250)
         plt.show()
         np.savetxt(self.folderPath + 'Average_lineout_of_shock_' + self.identifingFolder +'.txt' , np.c_[self.y_axis, FlattenToX])
         
         
-        indivualLineouts = False
-        if indivualLineouts:        
+        
+        if self.indivualLineouts:        
             lineouts = 8
             f, axarr = plt.subplots(nrows = lineouts/2, ncols = 2, figsize=(6, 9))
             
@@ -190,20 +206,28 @@ class LineoutAnalysis():
             plt.tight_layout()
             plt.suptitle('The evolution of the density profile: ' + self.identifingFolder)
             plt.show()
-    
-        
-mainDir = '/Volumes/CIDU_passport/openFOAM/Line Out Data/PressureScan_5mm_above_Nozzle/'
-#mainDir = '/Volumes/CIDU_passport/openFOAM/Line Out Data/1mm_Above_Blade_parallel/'
 
-listSubFolders =  [x[0] for x in os.walk(mainDir)][1:]
-for i in range(len(listSubFolders)):
-    listSubFolders[i] += '/'
-    print listSubFolders[i]
+def SubFolders(mainDir):
+    listSubFolders =  [x[0] for x in os.walk(mainDir)][1:]    
+    for i in range(len(listSubFolders)):
+        listSubFolders[i] += '/'
+        print listSubFolders[i].split('/')[-2]
+    return listSubFolders
+
+if __name__ == "__main__":
     
-#farr = ['h80_0mm/',  'h80_1mm/']
-nameSplice = [4, -1]
-mach = False
-for path in listSubFolders:
-    bladeline = LineoutAnalysis(path, mach)
-    bladeline.readInDataToArrs()
-    bladeline.Evolution_of_ND(5)
+    #mainDir = '/Volumes/CIDU_passport/openFOAM/Line Out Data/PressureScan_5mm_above_Nozzle/'
+    mainDir = '/Volumes/CIDU_passport/openFOAM/Line Out Data/1mm_Above_Blade_parallel/'
+    #mainDir = '/Users/chrisunderwood/Downloads/1mm_Above_Blade_parallel/'
+    mainDir = '/Volumes/GoogleDrive/My Drive/HydroSimulations_openFOAM/1807_CheckingNozzleConditions/'
+
+    
+    listSubFolders = SubFolders(mainDir)
+        
+    #farr = ['h80_0mm/',  'h80_1mm/']
+    nameSplice = [4, -1]
+    mach = False
+    for path in listSubFolders:
+        bladeline = LineoutAnalysis(path, mach, True)
+        bladeline.readInDataToArrs()
+        bladeline.Evolution_of_ND(5)
