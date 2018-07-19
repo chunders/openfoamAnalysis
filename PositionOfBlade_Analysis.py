@@ -40,9 +40,9 @@ import matplotlib.pyplot as plt
 import os
 from matplotlib import gridspec
 import math
-import seaborn as sns
-
-sns.set_context('poster')
+#import seaborn as sns
+#
+#sns.set_context('poster')
 figSize = (10,10)
 
 #==============================================================================
@@ -197,7 +197,7 @@ class AveLineout():
     def plotOneOption(self, option, trans0height1):
         print 'Name ', option[0]
         
-        c=iter(plt.cm.nipy_spectral(np.linspace(0.2,0.9,len(option[1]))))
+        c=iter(plt.cm.tab10(np.linspace(0.0,0.9,len(option[1]))))
         
         for index in option[1]:
             col = next(c)
@@ -314,14 +314,16 @@ class Lineout_Pos_Locator():
 
 if __name__ == "__main__":
     mainDir = '/Volumes/CIDU_passport/openFOAM/Line Out Data/1mm_Above_Blade_parallel/'
-    
+#    mainDir = '/Users/chrisunderwood/Downloads/1mm_Above_Blade_parallel/'
+
     listSubFolders =  [x[0]+ '/' for x in os.walk(mainDir)][1:]
+    print listSubFolders
     
     #lines = AveLineout(listSubFolders[:8])
     lines = AveLineout(listSubFolders)
     
     #lines.plotAllLines()
-    #lines.plot_constH()
+    lines.plot_constH()
     #print ; print
     #lines.plot_constT()
     
@@ -329,15 +331,19 @@ if __name__ == "__main__":
     trans = lines.get_trans()
     height = lines.get_height()
     
-    #lines.plotOneOption(height[0], 0)
-    #plt.savefig(mainDir + 'Altering_Trans.png')
-    #plt.show()
+    lines.plotOneOption([50.0, [0, 1,2, 3,  5,  7]], 0)
+#    lines.plotOneOption(height[0], 0)
+
+    plt.tight_layout()
+    plt.savefig(mainDir + 'Altering_Trans.png')
+    plt.show()
     
-    #lines.plotOneOption(trans[5], 1)
-    #plt.savefig(mainDir + 'Altering_Height.png')
-    #plt.show()
+    lines.plotOneOption(trans[7], 1)
+    plt.tight_layout()
+    plt.savefig(mainDir + 'Altering_Height.png')
+    plt.show()
     
-    for i in range(6):
+    for i in range(8):
         lines.findRegions(i)
         
     plotFit = lines.regionDims[height[0][1]]
@@ -368,7 +374,7 @@ if __name__ == "__main__":
     capWidth = 2
     plt.figure(figsize=(8,8))
     ax = plt.subplot()
-    sns.set_style('whitegrid')
+#    sns.set_style('whitegrid')
     (_, caps, _) = ax.errorbar(lines.bladePos[height[0][1]][:,0] * 0.1,
                                                plotFit[:, 1] / plotFit[:, 0],
                   yerr = (plotFit[:, 1] + plotFit[:, 2])*0.5 / plotFit[:,0],
@@ -400,7 +406,7 @@ if __name__ == "__main__":
     #==============================================================================
     # A plot that shows the trends of both regions, high and accelerating
     #==============================================================================
-    sns.set_style('white')
+#    sns.set_style('white')
     plt.figure(figsize=(8,8))
     xfit = np.arange(-7, -0.9, 0.1)
     
@@ -440,7 +446,7 @@ if __name__ == "__main__":
     popt, pcov = curve_fit(lin, x,y, p0=[-0.5, 0])
     yfit = lin(xfit, *popt)
     plt.plot(xfit, yfit, 'r')
-    plt.text(-6.8, 13, 
+    plt.text(-6.8, 13.7, 
              'y = ({0:.2f}'.format(popt[0])+ '+/-{0:.2f}'.format(perr[0])+ ')*x + ({0:.2f}'.format(popt[1])+ '+/-({0:.2f}'.format(perr[1])+ ')',
              bbox=dict(facecolor='red', alpha=0.5))
              
