@@ -59,14 +59,14 @@ class resFitter():
 # with a series of gaussians to improve on the fit.
 # Splitting the fitting up into points where it changes around zero
 #==============================================================================
-    def __init__(self,xRes, Res, shockFront, Graphics, printing):
+    def __init__(self,xRes, Res, shockFront, Graphics, printing, regExtender = 0, FitBeyond = 5e-05):
         # Initialise the class
         self.shock  = shockFront
         self.x_res = xRes
         self.res = Res
         self.displayToConsole = printing
         # steepness of stepfunctions 
-        self.steepness = 1e6
+        self.steepness = 1e8
         
         #Work out when it changes sign
         self.nodeIndex = []
@@ -79,6 +79,8 @@ class resFitter():
         if self.graphics: self.displayInput()
         
         self.textOutput = ''
+        self.regionExtender = regExtender
+        self.fitBeyondShock = FitBeyond
         
         
     def displayInput(self):
@@ -110,15 +112,16 @@ class resFitter():
 #             Only the nodes around the shock are really important
 #             Therefore limit the fitting to the region that is important
 #==============================================================================
-            fitBeyondShock = 5e-05 # In meters
-            if self.nodesInRes[i+1] > 0 and self.nodesInRes[i] < self.shock + fitBeyondShock:
+#            if self.nodesInRes[i+1] > 0 and self.nodesInRes[i] < self.shock + self.fitBeyondShock:
+            if self.nodesInRes[i+1] > 0:
+#            if True:
                 # Count the regions for labelling sake
                 self.regionCounter +=1
                 if self.nodeIndex[i] < startIndex: startIndex = self.nodeIndex[i]
                 if self.nodeIndex[i+1] > endIndex: endIndex = self.nodeIndex[i+1]
                 
-                croppedX = self.x_res[self.nodeIndex[i]:self.nodeIndex[i+1]]
-                croppedY = self.res[self.nodeIndex[i]:self.nodeIndex[i+1]]
+                croppedX = self.x_res[self.nodeIndex[i] - self.regionExtender:self.nodeIndex[i+1] + self.regionExtender]
+                croppedY = self.res[self.nodeIndex[i] - self.regionExtender:self.nodeIndex[i+1] + self.regionExtender]
                 if self.graphics: plt.plot(croppedX, croppedY, '.-')
                 if np.sum(croppedY) > 0:
                     sign = 1
@@ -126,15 +129,31 @@ class resFitter():
                     sign = -1
                 
                 # Create guess, which should be the mid point of the zone
-                guess = [1e25, (croppedX[0] + croppedX[-1])*0.5 ,0.001]
+                guess = [max(abs(croppedY)), 
+                         croppedX[nearposn(abs(croppedY), max(abs(croppedY)))] ,
+                         (croppedX[-1] - croppedX[0]) * 0.5 ]
+                guess = [max(abs(croppedY)), 
+                         croppedX[nearposn(abs(croppedY), max(abs(croppedY)))]
+                         ,0.01]
                 fitG = bestGaus.select_Gaus_fit(croppedX,croppedY * sign, False, guess)
                 fitResults = fitG.output()
+                print guess, guess - fitResults[1]
+
                 self.gauss_Fit_params.append(fitResults)
-                xFit = np.arange(croppedX[0], croppedX[-1], 1e-5)
+                xFit = np.arange(croppedX[0] - 1e-4, croppedX[-1] + 1e-4, 1e-5)
                 yFit = self.gaus_selector(xFit, fitResults) * sign
 #                self.newFit.extend( np.array(self.gaus_selector(croppedX, fitResults) * sign ))
                 self.newX.extend(np.array(croppedX))
-                if self.graphics: plt.plot(xFit,yFit)
+                if self.graphics: 
+                    plt.clf()
+                    plt.plot(xFit,yFit)
+                    plt.plot(croppedX, croppedY)
+                    plt.vlines(guess[1], min(croppedY), max(croppedY))
+                    plt.vlines(guess[1] + guess[2], min(croppedY), max(croppedY), 'r')
+                    plt.vlines(guess[1] - guess[2], min(croppedY), max(croppedY), 'r')
+
+                    plt.title(str(sign) + '\n' + str(guess) + '\n' + str(fitResults[1]))
+                    plt.show()
                 
                 self.newFit += self.regionSelector_stepfuncs(self.nodesInRes[i], self.nodesInRes[i+1], self.regionCounter, fitResults, sign)
                 
@@ -157,7 +176,7 @@ class resFitter():
     #        plt.plot(self.newX, self.res[startIndex:endIndex] - self.newFit, label ='new residual')
             plt.legend()
             plt.show()
-        return self.newFit, self.textOutput
+        return self.newFit, self.textOutput, self.nodesInRes
 
     def printStepFnc(self, xc, k, up, number):
         if up: 
@@ -225,6 +244,6 @@ if __name__ == "__main__":
     shock = 0.00015
     print len(resIn[:,0])
     
-    resSolver = resFitter(resIn[:,0], resIn[:,1], shock, True, False)
-    ResidualFit, Textoutput = resSolver.sections()
-    print Textoutput
+    resSolver = resFitter(resIn[:,0], resIn[:,1], shock, True, False, 0)
+    ResidualFit, Textoutput, nodes = resSolver.sections()
+#    print Textoutput
