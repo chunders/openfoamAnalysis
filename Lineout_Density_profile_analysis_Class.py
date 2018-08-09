@@ -215,11 +215,12 @@ def SubFolders(mainDir):
     return listSubFolders
 
 if __name__ == "__main__":
+    gdrive = '/Volumes/GoogleDrive/My Drive/HydroSimulations_openFOAM/'
     
     #mainDir = '/Volumes/CIDU_passport/openFOAM/Line Out Data/PressureScan_5mm_above_Nozzle/'
-    mainDir = '/Volumes/CIDU_passport/openFOAM/Line Out Data/1mm_Above_Blade_parallel/'
+    #mainDir = '/Volumes/CIDU_passport/openFOAM/Line Out Data/1mm_Above_Blade_parallel/'
     #mainDir = '/Users/chrisunderwood/Downloads/1mm_Above_Blade_parallel/'
-    mainDir = '/Volumes/GoogleDrive/My Drive/HydroSimulations_openFOAM/1807_CheckingNozzleConditions/'
+    mainDir = gdrive + '180719_HighResolutionAirNozzle/'
 
     
     listSubFolders = SubFolders(mainDir)

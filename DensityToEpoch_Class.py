@@ -41,7 +41,12 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 
 import select_best_gaussFit_class as bestGaus
-import foamToEpoch_ResidualFit_Class as resFit
+if False:
+    import foamToEpoch_ResidualFit_Class_working as resFit
+else:
+    import foamToEpoch_ResidualFit_Class as resFit
+
+
 
 SNS = False
 if SNS:
@@ -133,17 +138,18 @@ class Lineout_to_epoch():
         plt.figure(figsize = (5,3.5))
         plt.plot(self.x,self.y)
         plt.vlines(0, 0, self.y.max(), 'r', linestyle = 'dashed')
-        for i in self.x[self.indexs]:
-            plt.vlines(i, 0, self.y.max(), 'g', linestyle = 'dashed')
+        for i, col in zip(self.x[self.indexs], ['g', 'k', 'b']):
+            plt.vlines(i, 0, self.y.max(), col, linestyle = 'dashed')
         plt.title('Profile to plot')
         plt.show()
         
     def find_start_fin_shock(self, MoveShockToBottomMark):
         #This is either min or max depending on direction
+        print 'finding indexes'
         self.peakGrad = self.ygrad.min()
         
         self.shockFront =  self.x[nearposn(self.ygrad, self.peakGrad)]
-        
+        shockIndex = nearposn(self.ygrad, self.peakGrad)
 #        print 
 #        print 'Peak gradient: ', self.ygrad.max(), nearposn(self.ygrad, self.ygrad.max())
 #        print 'Shock pos: ', self.shockFront
@@ -151,11 +157,24 @@ class Lineout_to_epoch():
         yabs = abs(self.ygrad)
         start = np.argmax(yabs >  abs(self.peakGrad*0.05))
         finish = np.argmax(yabs[::-1] >  abs(self.peakGrad*0.1))
+#        print finish, len(yabs)
+        self.indexs = [start, shockIndex, len(self.x) - finish]
+        if finish == 0:
+#            print 'Last index Error'
+            finish = shockIndex + nearposn(self.y[shockIndex:], self.y[shockIndex:].min())
+            print nearposn(self.y[shockIndex:], self.y[shockIndex:].min())
+#            plt.plot(self.x[shockIndex:], self.y[shockIndex:])
+#            plt.vlines(self.x[finish], 0, self.y.max())
+            self.indexs = [start, shockIndex, finish]
+
+#        print finish, len(yabs)
+
     #    print x[start], x[::-1][finish]
-        self.indexs = [start, nearposn(self.ygrad, self.peakGrad), len(self.x) - finish]
         self.indexs[1] = self.indexs[1] + MoveShockToBottomMark
         self.plotInitProfile()
         self.stepPos = self.x[self.indexs[1]]
+        print self.indexs
+
 
     
     def printIndexes(self):
@@ -279,8 +298,11 @@ class Lineout_to_epoch():
         ax3.yaxis.grid(color='red', linestyle='dashed')
         ax3.xaxis.grid(color='red', linestyle='dashed')
         ax3.set_xlim([self.x[0], self.x[-1]])
-        ax3.plot(self.x_res, self.res,  'r', lw = 0.9) 
-        ax3.plot(self.x, self.y - self.yoverall,  'g', lw = 0.9) 
+        ax3.plot(self.x_res, self.res,  'r', lw = 1.5) 
+        ax3.plot(self.x[self.indexs[0]:self.indexs[2]], 
+                 self.y[self.indexs[0]:self.indexs[2]] - self.yoverall[self.indexs[0]:self.indexs[2]],
+                 'g', lw = 0.9) 
+        ax3.plot(self.nodes * 1000, np.zeros(len(self.nodes)), '.')
 
         ax3.set_ylabel('Residual', color='r')
         ax3.tick_params('y', colors='r')
@@ -334,16 +356,17 @@ class Lineout_to_epoch():
 #     This function should become redundant with the new file being created
 #     to look into this
 #==============================================================================
-    def inspect_residual(self):
+    def inspect_residual(self, regExtender, FitBeyond):
         
-        extraFit = resFit.resFitter(self.x_res, self.res, self.shockFront, False, False)
-        newFit, resFitText = extraFit.sections()
+        extraFit = resFit.resFitter(self.x_res, self.res, self.shockFront, False, False, regExtender, FitBeyond)
+        newFit, resFitText, self.nodes = extraFit.sections()
+
+        np.savetxt('testRes.txt', np.c_[self.x_res, self.res])
 
         self.yoverall[self.indexs[0]:self.indexs[-1]] += newFit
         return resFitText
         
 #        plt.plot(self.x_res, self.res)
-##        np.savetxt('testRes.txt', np.c_[self.x_res, self.res])
 #        crossings = []
 #        for i in range(len(self.res)-1):
 #            if self.res[i] * self.res[i+1] < 0:
@@ -358,7 +381,7 @@ class Lineout_to_epoch():
         
                 
 def run(folderPath, fileName, invert, MoveShockToBottomMark,
-        shiftInX, xScale, guess, name):
+        shiftInX, xScale, guess, name, regExtender = 0, FitBeyond = 5e-05):
     translate = [0.0, xScale]
     
     #Locate the shock front and them shift to shiftInX infront of it
@@ -373,7 +396,7 @@ def run(folderPath, fileName, invert, MoveShockToBottomMark,
 #    dp.printIndexes()
     dp.fit_main_superGauss(guess)
     dp.createFittedFunction()
-    resFitText = dp.inspect_residual()
+    resFitText = dp.inspect_residual(regExtender, FitBeyond)
 
     dp.plotFit_vs_input()
     plt.savefig(folderPath + 'densityMapping__' + folderPath.split('/')[-2] + '__' + fileName.split('.')[0] + '.png',
@@ -388,7 +411,7 @@ if __name__ == "__main__":
     folderPath = '/Volumes/CIDU_passport/openFOAM/Line Out Data/Blade_lineout/h80_0mm/'
     folderPath = '/Volumes/GoogleDrive/My Drive/HydroSimulations_openFOAM/Line Out Data/Blade_lineout/h80_0mm/'
     fileName = '45lineout.txt'
-    fileName = '65lineout.txt'
+#    fileName = '65lineout.txt'
     invert = True
     MoveShockToBottomMark = 15
     
